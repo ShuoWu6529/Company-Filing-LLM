@@ -8,24 +8,25 @@ class SecEdgar:
         r = requests.get(url, headers=headers)
         filejson = r.json()
 
-        self.name_dict = filejson.copy()
-        for old_key, value in filejson.items():
-            new_key = value["title"]
-            self.name_dict[new_key] = self.name_dict.pop(old_key)
+        self.name_dict = {
+            value["title"]: value
+            for value in filejson.values()
+        }
 
-        self.ticker_dict = filejson.copy()
-        for old_key, value in filejson.items():
-            new_key = value["ticker"]
-            self.ticker_dict[new_key] = self.ticker_dict.pop(old_key)
+        self.ticker_dict = {
+            value["ticker"]: value
+            for value in filejson.values()
+        }
 
     def name_to_cik(self, name):
         company_info = self.name_dict[name]
         cik = company_info["cik_str"]
         ticker = company_info["ticker"]
-        return (cik, name, ticker)
+        return cik, name, ticker
 
     def ticker_to_cik(self, ticker):
         company_info = self.ticker_dict[ticker]
         cik = company_info["cik_str"]
         name = company_info["title"]
-        return (cik, name, ticker)
+        return cik, name, ticker
+
