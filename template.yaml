@@ -1,0 +1,57 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: SEC Lambda project — EDGAR refresh and document retrieval
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 256
+
+Resources:
+  CikLookupModule:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: CikLookupModule
+      ContentUri: module/cik_lookup/
+      CompatibleRuntimes:
+        - python3.12
+
+  EdgarRefreshFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      CodeUri: edgar_refresh/
+      Layers:
+        - !Ref CikLookupModule
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref EdgarBucket
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref EdgarBucket
+      Events:
+        DailyRefresh:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 12 * * ? *)
+
+  DocumentRetrievalFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      CodeUri: document_retrieval/
+      Layers:
+        - !Ref CikLookupModule
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref EdgarBucket
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref EdgarBucket
+
+  EdgarBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
