@@ -1,8 +1,7 @@
 import json
 import os
-from cik_lookup import SecEdgar
 import boto3
-
+from cik_lookup import SecEdgar
 
 def lambda_handler(event, context):
     sec = SecEdgar()

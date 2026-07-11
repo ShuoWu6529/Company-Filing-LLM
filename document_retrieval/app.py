@@ -1,9 +1,8 @@
 import json
 import time
-import requests
-from cik_lookup import SecEdgar
 import os
 import boto3
+from cik_lookup import SecEdgar
 
 RESPONSE_MODEL = "us.anthropic.claude-sonnet-4-5-20250514-v1:0"
 

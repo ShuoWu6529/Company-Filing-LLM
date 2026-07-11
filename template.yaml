@@ -13,7 +13,7 @@ Resources:
     Type: AWS::Serverless::LayerVersion
     Properties:
       LayerName: CikLookupModule
-      ContentUri: module/cik_lookup/
+      ContentUri: lookup_package
       CompatibleRuntimes:
         - python3.12
     Metadata:

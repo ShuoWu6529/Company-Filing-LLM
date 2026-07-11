@@ -1,22 +1,40 @@
-from datetime import datetime
 import requests
+import json
+import boto3
+import os
+import warnings
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
+
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+
+SEC_HEADERS = {"User-Agent": "MLT CP28 shuowu1000@gmail.com"}
+
 
 class SecEdgar:
     def __init__(self):
-        url = "https://www.sec.gov/files/company_tickers.json"
-        self.headers = {"user-agent": "MLT CP28 shuowu1000@gmail.com"}
-        r = requests.get(url, headers=self.headers)
-        filejson = r.json()
+        self.headers = SEC_HEADERS
+        self.name_dict = {}
+        self.ticker_dict = {}
+        self.raw_tickers = None
 
-        self.name_dict = {
-            value["title"]: value
-            for value in filejson.values()
-        }
+    def load_from_sec(self):
+        r = requests.get(
+            "https://www.sec.gov/files/company_tickers.json", headers=self.headers
+        )
+        self.raw_tickers = r.json()
+        self._build_dicts(self.raw_tickers)
 
-        self.ticker_dict = {
-            value["ticker"]: value
-            for value in filejson.values()
-        }
+    def load_from_bucket(self):
+        s3 = boto3.client("s3")
+        response = s3.get_object(
+            Bucket=os.environ["BUCKET_NAME"], Key="company_tickers.json"
+        )
+        self.raw_tickers = json.loads(response["Body"].read())
+        self._build_dicts(self.raw_tickers)
+
+    def _build_dicts(self, filejson):
+        self.name_dict = {value["title"]: value for value in filejson.values()}
+        self.ticker_dict = {value["ticker"]: value for value in filejson.values()}
 
     def name_to_cik(self, name):
         company_info = self.name_dict[name]
@@ -29,7 +47,7 @@ class SecEdgar:
         cik = company_info["cik_str"]
         name = company_info["title"]
         return cik, name, ticker
-    
+
     def _fetch_company_filings(self, cik):
         cik = str(cik).zfill(10)
         url = f"https://data.sec.gov/submissions/CIK{cik}.json"
@@ -37,7 +55,7 @@ class SecEdgar:
         filejson = r.json()
         filings = filejson["filings"]["recent"]
         return filings
-    
+
     def _fetch_company_document(self, cik, accession_number, primary_document):
         accession_number = accession_number.replace("-", "")
         url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_number}/{primary_document}"
@@ -51,11 +69,13 @@ class SecEdgar:
         r = requests.get(url, headers=self.headers)
         filejson = r.json()
         return filejson["facts"]
-    
+
     def _fetch_financial_reports(self, cik, year):
         filings = self._fetch_company_filings(cik)
         company_facts = self._fetch_company_facts(cik)
-        shares = company_facts["dei"]["EntityCommonStockSharesOutstanding"]["units"]["shares"]
+        shares = company_facts["dei"]["EntityCommonStockSharesOutstanding"]["units"][
+            "shares"
+        ]
 
         fy_accession_numbers = set()
         financial_reports_names = {"10-K", "10-Q"}
@@ -65,7 +85,6 @@ class SecEdgar:
 
             if fy == year and form in financial_reports_names:
                 fy_accession_numbers.add(share["accn"])
-
 
         accession_numbers = filings["accessionNumber"]
         primary_documents = filings["primaryDocument"]
@@ -81,13 +100,21 @@ class SecEdgar:
         return reports
 
     def annual_filing(self, cik, year):
-        reports  = self._fetch_financial_reports(cik, year)
-        accession_number, primary_document = reports[3]        
+        reports = self._fetch_financial_reports(cik, year)
+        accession_number, primary_document = reports[3]
         ten_k = self._fetch_company_document(cik, accession_number, primary_document)
-        return ten_k
+        return self.parse_for_content(ten_k)
 
     def quarterly_filing(self, cik, year, quarter):
-        reports  = self._fetch_financial_reports(cik, year)
-        accession_number, primary_document = reports[quarter - 1]        
+        reports = self._fetch_financial_reports(cik, year)
+        accession_number, primary_document = reports[quarter - 1]
         ten_q = self._fetch_company_document(cik, accession_number, primary_document)
-        return ten_q
+        return self.parse_for_content(ten_q)
+    
+    def parse_for_content(self, text):
+        soup = BeautifulSoup(text, "lxml")
+
+        for hidden in soup.select('[style*="display:none"]'):
+            hidden.decompose()
+        
+        return soup.get_text()
