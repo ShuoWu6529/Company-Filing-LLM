@@ -13,9 +13,11 @@ Resources:
     Type: AWS::Serverless::LayerVersion
     Properties:
       LayerName: CikLookupModule
-      ContentUri: module/cik_lookup/
+      ContentUri: lookup_package
       CompatibleRuntimes:
         - python3.12
+    Metadata:
+      BuildMethod: python3.12
 
   EdgarRefreshFunction:
     Type: AWS::Serverless::Function
@@ -46,9 +48,19 @@ Resources:
       Environment:
         Variables:
           BUCKET_NAME: !Ref EdgarBucket
+          BEDROCK_MODEL_ARN: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+          EDGAR_REFRESH_FUNCTION_NAME: !Ref EdgarRefreshFunction
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref EdgarBucket
+        - LambdaInvokePolicy:
+            FunctionName: !Ref EdgarRefreshFunction
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                - arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0
 
   EdgarBucket:
     Type: AWS::S3::Bucket
